@@ -9,6 +9,7 @@ const attendanceSchema = new mongoose.Schema(
     firstJoinAt: { type: Date },
     lastSeenAt: { type: Date },
     leftAt: { type: Date },
+    currentJoinedAt: { type: Date },
 
     totalMs: { type: Number, default: 0 },
     status: { type: String, enum: ["present", "absent", "pending"], default: "pending" }

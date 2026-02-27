@@ -60,11 +60,19 @@ router.post("/session/:sessionId/end", authRequired, requireRole("teacher"), asy
     await session.save();
 
     const rows = await Attendance.find({ sessionId: session._id });
+    const now = Date.now();
     for (const r of rows) {
+      // Finalize duration for users who never explicitly left
+      if (r.currentJoinedAt) {
+        r.totalMs += Math.max(0, now - r.currentJoinedAt.getTime());
+        r.currentJoinedAt = null;
+        r.leftAt = new Date(now);
+        r.lastSeenAt = new Date(now);
+      }
       if (r.status === "pending") {
         r.status = r.totalMs >= 5 * 60 * 1000 ? "present" : "absent";
-        await r.save();
       }
+      await r.save();
     }
 
     res.json({ ok: true });
@@ -92,7 +100,20 @@ router.get("/session/:sessionId/attendance", authRequired, requireRole("teacher"
     if (!m || m.roleInClass !== "teacher") return res.status(403).json({ error: "Teacher only" });
 
     const rows = await Attendance.find({ sessionId: session._id }).populate("userId", "name email role").lean();
-    res.json({ rows });
+
+    // Compute live duration for users still in session and filter out teachers
+    const now = Date.now();
+    const filtered = rows
+      .filter(r => r.userId?.role !== "teacher")
+      .map(r => {
+        let totalMs = r.totalMs || 0;
+        if (r.currentJoinedAt && !r.leftAt) {
+          totalMs += now - new Date(r.currentJoinedAt).getTime();
+        }
+        return { ...r, totalMs };
+      });
+
+    res.json({ rows: filtered });
   } catch (e) { next(e); }
 });
 

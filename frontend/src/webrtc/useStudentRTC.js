@@ -1,8 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RTC_CONFIG } from "./rtcConfig.js";
 
 export function useStudentRTC(socket, sessionId, remoteVideoRef) {
   const pcRef = useRef(null);
+  const teacherSocketIdRef = useRef(null);
+  const iceCandidateQueueRef = useRef([]);
+  const [connectionState, setConnectionState] = useState("waiting");
 
   useEffect(() => {
     if (!socket || !sessionId) return;
@@ -13,40 +16,75 @@ export function useStudentRTC(socket, sessionId, remoteVideoRef) {
     pc.ontrack = (e) => {
       if (remoteVideoRef.current && e.streams[0]) {
         remoteVideoRef.current.srcObject = e.streams[0];
+        setConnectionState("connected");
+      }
+    };
+
+    // Set onicecandidate at creation time (not inside onOffer)
+    pc.onicecandidate = (e) => {
+      if (e.candidate && teacherSocketIdRef.current) {
+        socket.emit("webrtc:ice", {
+          toSocketId: teacherSocketIdRef.current,
+          candidate: e.candidate,
+          sessionId
+        });
       }
     };
 
     pc.onconnectionstatechange = () => {
-      console.log("WebRTC connection state:", pc.connectionState);
+      const state = pc.connectionState;
+      console.log("WebRTC connection state:", state);
+      if (state === "connected") setConnectionState("connected");
+      else if (state === "connecting") setConnectionState("connecting");
+      else if (state === "disconnected" || state === "failed") setConnectionState("disconnected");
     };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE connection state:", pc.iceConnectionState);
+    };
+
+    // Process queued ICE candidates after remote description is set
+    async function processIceQueue() {
+      const queue = iceCandidateQueueRef.current.splice(0);
+      for (const candidate of queue) {
+        try {
+          await pc.addIceCandidate(candidate);
+        } catch (err) {
+          console.error("Error adding queued ICE candidate:", err);
+        }
+      }
+    }
 
     const onOffer = async ({ fromSocketId, offer }) => {
       try {
-        // If we already have a remote description (re-offer), reset the PC
-        if (pc.signalingState !== "stable" && pc.signalingState !== "have-local-offer") {
+        teacherSocketIdRef.current = fromSocketId;
+
+        // Handle re-negotiation: if we're not in a state to accept an offer, skip
+        if (pc.signalingState !== "stable") {
           console.warn("Ignoring offer in state:", pc.signalingState);
           return;
         }
 
-        pc.onicecandidate = (e) => {
-          if (e.candidate) {
-            socket.emit("webrtc:ice", { toSocketId: fromSocketId, candidate: e.candidate, sessionId });
-          }
-        };
+        setConnectionState("connecting");
+        await pc.setRemoteDescription(offer);
+        await processIceQueue();
 
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit("webrtc:answer", { toSocketId: fromSocketId, answer, sessionId });
       } catch (err) {
         console.error("Error handling offer:", err);
+        setConnectionState("disconnected");
       }
     };
 
     const onIce = async ({ candidate }) => {
       try {
         if (pc.remoteDescription) {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          await pc.addIceCandidate(candidate);
+        } else {
+          // Queue ICE candidates that arrive before the offer
+          iceCandidateQueueRef.current.push(candidate);
         }
       } catch (err) {
         console.error("Error adding ICE candidate:", err);
@@ -59,6 +97,9 @@ export function useStudentRTC(socket, sessionId, remoteVideoRef) {
     socket.emit("live:joinRoom", { sessionId }, (res) => {
       if (!res?.ok) {
         console.error("Failed to join room:", res?.error);
+        setConnectionState("error");
+      } else {
+        setConnectionState("waiting");
       }
     });
     socket.emit("attendance:join", { sessionId }, () => {});
@@ -74,4 +115,6 @@ export function useStudentRTC(socket, sessionId, remoteVideoRef) {
       pc.close();
     };
   }, [socket, sessionId, remoteVideoRef]);
+
+  return { connectionState };
 }

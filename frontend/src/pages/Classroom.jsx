@@ -5,6 +5,8 @@ import { useAuth } from "../auth/useAuth.js";
 import Tabs from "../components/Tabs.jsx";
 import FileUploader from "../components/FileUploader.jsx";
 import Attachments from "../components/Attachments.jsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function Classroom() {
   const { id: classroomId } = useParams();
@@ -565,6 +567,64 @@ function AttendanceReportInline({ classroomId, token }) {
     return `${minutes}m ${seconds}s`;
   }
 
+  function downloadPDF(session) {
+    const doc = new jsPDF();
+    const sessionDate = new Date(session.startedAt).toLocaleDateString();
+    const sessionTime = new Date(session.startedAt).toLocaleTimeString();
+
+    doc.setFontSize(18);
+    doc.setTextColor(67, 97, 238);
+    doc.text("Attendance Report", 14, 22);
+
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Session: ${sessionDate} at ${sessionTime}`, 14, 32);
+    doc.text(`Status: ${session.status}`, 14, 38);
+    if (session.endedAt) {
+      doc.text(`Duration: ${formatDuration(new Date(session.endedAt) - new Date(session.startedAt))}`, 14, 44);
+    }
+
+    const tableRows = attendance.map((row, i) => [
+      i + 1,
+      row.userId?.name || "Unknown",
+      row.userId?.email || "-",
+      row.firstJoinAt ? new Date(row.firstJoinAt).toLocaleTimeString() : "-",
+      formatDuration(row.totalMs || 0),
+      (row.status || "pending").charAt(0).toUpperCase() + (row.status || "pending").slice(1)
+    ]);
+
+    autoTable(doc, {
+      startY: session.endedAt ? 50 : 44,
+      head: [["#", "Student", "Email", "First Join", "Duration", "Status"]],
+      body: tableRows,
+      theme: "grid",
+      headStyles: { fillColor: [67, 97, 238], fontSize: 10 },
+      bodyStyles: { fontSize: 9 },
+      columnStyles: {
+        0: { cellWidth: 12 },
+        5: { fontStyle: "bold" }
+      },
+      didParseCell(data) {
+        if (data.section === "body" && data.column.index === 5) {
+          const val = String(data.cell.raw).toLowerCase();
+          if (val === "present") data.cell.styles.textColor = [22, 101, 52];
+          else if (val === "absent") data.cell.styles.textColor = [153, 27, 27];
+          else data.cell.styles.textColor = [133, 77, 14];
+        }
+      }
+    });
+
+    const present = attendance.filter(r => r.status === "present").length;
+    const absent = attendance.filter(r => r.status === "absent").length;
+    const pending = attendance.filter(r => r.status === "pending").length;
+    const finalY = (doc.lastAutoTable?.finalY || 60) + 10;
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text(`Summary: ${present} Present, ${absent} Absent, ${pending} Pending  |  Total: ${attendance.length} students`, 14, finalY);
+
+    doc.save(`attendance-${sessionDate.replace(/\//g, "-")}.pdf`);
+  }
+
   if (loading) return <div className="loading"><div className="spinner"></div></div>;
 
   return (
@@ -593,9 +653,33 @@ function AttendanceReportInline({ classroomId, token }) {
 
               {selectedSession === s._id && (
                 <div className="attendance-table mt-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex gap-2" style={{ fontSize: "0.85rem" }}>
+                      <span className="attendance-badge attendance-badge--present">
+                        {attendance.filter(r => r.status === "present").length} Present
+                      </span>
+                      <span className="attendance-badge attendance-badge--absent">
+                        {attendance.filter(r => r.status === "absent").length} Absent
+                      </span>
+                      <span className="attendance-badge attendance-badge--pending">
+                        {attendance.filter(r => r.status === "pending").length} Pending
+                      </span>
+                    </div>
+                    {attendance.length > 0 && (
+                      <button className="btn btn--primary btn--sm" onClick={() => downloadPDF(s)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: 4 }}>
+                          <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M7 10L12 15L17 10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M12 15V3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Download PDF
+                      </button>
+                    )}
+                  </div>
                   <table>
                     <thead>
                       <tr>
+                        <th>#</th>
                         <th>Student</th>
                         <th>First Join</th>
                         <th>Duration</th>
@@ -603,9 +687,13 @@ function AttendanceReportInline({ classroomId, token }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {attendance.map(row => (
+                      {attendance.map((row, i) => (
                         <tr key={row._id}>
-                          <td>{row.userId?.name || "Unknown"}</td>
+                          <td>{i + 1}</td>
+                          <td>
+                            <div>{row.userId?.name || "Unknown"}</div>
+                            <div className="text-muted" style={{ fontSize: "0.8rem" }}>{row.userId?.email}</div>
+                          </td>
                           <td>{row.firstJoinAt ? new Date(row.firstJoinAt).toLocaleTimeString() : "-"}</td>
                           <td>{formatDuration(row.totalMs || 0)}</td>
                           <td>
@@ -616,7 +704,7 @@ function AttendanceReportInline({ classroomId, token }) {
                         </tr>
                       ))}
                       {attendance.length === 0 && (
-                        <tr><td colSpan="4" className="text-muted text-center">No attendance data</td></tr>
+                        <tr><td colSpan="5" className="text-muted text-center">No attendance data</td></tr>
                       )}
                     </tbody>
                   </table>

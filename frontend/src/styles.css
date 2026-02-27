@@ -939,6 +939,142 @@ ul li a:hover {
   to { opacity: 0; }
 }
 
+/* Connection Badge (Live Class) */
+.connection-badge {
+  padding: 6px 14px;
+  border-radius: 50px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.connection-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.connection-badge--connected {
+  background-color: #dcfce7;
+  color: #166534;
+}
+.connection-badge--connected::before {
+  background-color: #22c55e;
+}
+
+.connection-badge--connecting {
+  background-color: #fef9c3;
+  color: #854d0e;
+}
+.connection-badge--connecting::before {
+  background-color: #eab308;
+  animation: pulse 1s infinite;
+}
+
+.connection-badge--waiting {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+.connection-badge--waiting::before {
+  background-color: #6366f1;
+  animation: pulse 1.5s infinite;
+}
+
+.connection-badge--disconnected,
+.connection-badge--error {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+.connection-badge--disconnected::before,
+.connection-badge--error::before {
+  background-color: #ef4444;
+}
+
+/* Video Overlay */
+.video-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  border-radius: var(--radius-lg);
+  text-align: center;
+  padding: 32px;
+}
+
+.video-overlay .spinner {
+  border-color: rgba(255,255,255,0.2);
+  border-top-color: white;
+}
+
+.video-overlay .text-muted {
+  color: rgba(255,255,255,0.6);
+}
+
+/* Live Info Bar */
+.live-info-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 20px;
+  background: var(--gray-100);
+  border-radius: var(--radius-md);
+}
+
+/* Dashboard improvements */
+.dashboard-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+}
+
+/* Classroom list item (used in dashboards) */
+.classroom-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+  gap: 12px;
+}
+
+.classroom-list-item:hover {
+  border-color: var(--primary);
+  background-color: rgba(67, 97, 238, 0.03);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Gap utilities */
+.gap-3 { gap: 24px; }
+
 /* Responsive additions for new features */
 @media (max-width: 768px) {
   .member-card {
@@ -964,5 +1100,16 @@ ul li a:hover {
     flex-direction: column;
     gap: 8px;
     text-align: center;
+  }
+
+  .classroom-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .connection-badge {
+    font-size: 0.75rem;
+    padding: 4px 10px;
   }
 }

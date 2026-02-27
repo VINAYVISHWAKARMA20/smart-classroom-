@@ -113,7 +113,14 @@ export function useTeacherRTC(socket, sessionId, localVideoRef) {
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
         // Step 2: Now that camera is ready, join the room
-        socket.emit("live:joinRoom", { sessionId }, () => {});
+        socket.emit("live:joinRoom", { sessionId }, (res) => {
+          if (res?.ok && res.peers) {
+            // Connect to any students already waiting in the room
+            for (const peerSocketId of res.peers) {
+              connectToPeer(peerSocketId);
+            }
+          }
+        });
         socket.emit("attendance:join", { sessionId }, () => {});
 
         // Step 3: Process any peers that arrived while camera was initializing

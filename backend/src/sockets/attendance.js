@@ -1,4 +1,4 @@
-﻿import LiveSession from "../models/LiveSession.js";
+import LiveSession from "../models/LiveSession.js";
 import { requireMember } from "../services/join.service.js";
 import { markJoin, markLeave } from "../services/attendance.service.js";
 
@@ -12,6 +12,7 @@ export function registerAttendanceSocket(io, socket) {
       if (!m) throw new Error("Not a member");
 
       socket.data.activeSessionId = sessionId;
+      socket.data.attendanceLeft = false;
 
       const { attendance } = await markJoin({ sessionId, userId: socket.user.id });
       cb?.({ ok: true, attendance });
@@ -24,6 +25,9 @@ export function registerAttendanceSocket(io, socket) {
 
   socket.on("attendance:leave", async ({ sessionId }, cb) => {
     try {
+      if (socket.data.attendanceLeft) { cb?.({ ok: true }); return; }
+      socket.data.attendanceLeft = true;
+
       const doc = await markLeave({ sessionId, userId: socket.user.id });
       cb?.({ ok: true, attendance: doc });
       io.to(`session:${sessionId}`).emit("attendance:update", { userId: socket.user.id, status: doc?.status, totalMs: doc?.totalMs });
@@ -34,9 +38,10 @@ export function registerAttendanceSocket(io, socket) {
 
   socket.on("disconnect", async () => {
     const sessionId = socket.data.activeSessionId;
-    if (sessionId) {
-      await markLeave({ sessionId, userId: socket.user.id });
-      io.to(`session:${sessionId}`).emit("attendance:update", { userId: socket.user.id });
+    if (sessionId && !socket.data.attendanceLeft) {
+      socket.data.attendanceLeft = true;
+      const doc = await markLeave({ sessionId, userId: socket.user.id });
+      io.to(`session:${sessionId}`).emit("attendance:update", { userId: socket.user.id, status: doc?.status, totalMs: doc?.totalMs });
     }
   });
 }

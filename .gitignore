@@ -2,7 +2,11 @@
 node_modules/
 
 # environment variables
-.env
+.env*
+!.env.example
+
+# uploads/user data
+uploads/
 
 # build files
 dist/

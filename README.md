@@ -116,7 +116,3 @@ This repository is configured to prioritize credentials security:
 Do **NOT** commit any `.env` file with hardcoded passwords or keys to GitHub.
 
 ---
-
-## 📄 License
-
-This project is licensed under the MIT License.
